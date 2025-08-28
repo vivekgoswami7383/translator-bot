@@ -15,6 +15,10 @@ const workspaceSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    bot_user_id: {
+      type: String,
+      required: true,
+    },
     bot_access_token: {
       type: String,
       required: true,

@@ -1,30 +1,71 @@
 import ISO6391 from "iso-639-1";
-import { constants } from "./constants.js";
+import { translationButtons } from "./templates.js";
+import { sendMessage, updateMessage } from "../services/slack.service.js";
+import { constants } from "../helpers/constants.js";
 
+/** 🔧 Helpers to reduce duplication */
+export const buildTranslationText = (
+  original,
+  translation,
+  lang,
+  includeOriginal
+) => {
+  const base = `${lang.flag} *Translation (${lang.name}):* ${translation}`;
+  return includeOriginal ? `${original}\n\n${base}` : base;
+};
+
+/**
+ * Validate if the given language code is ISO-639-1 compliant.
+ */
 export const validateLang = (lang) => ISO6391.validate(lang);
 
+/**
+ * Check if detected language matches expectations.
+ * Returns true if translation should continue, false if skipped.
+ */
 export const checkLanguage = (detectedLang, primaryLang, targetLang) => {
   if (detectedLang === primaryLang) return true;
   if (detectedLang === targetLang) return false;
   return true;
 };
 
-export const skipTranslation = (message) => {
+/**
+ * Remove bot mention from message text using the bot user ID
+ */
+export const removeBotMention = (text, botUserId) => {
+  if (!text || !botUserId) return text;
+
+  // Remove bot mention in format <@U123456789>
+  const mentionPattern = new RegExp(`<@${botUserId}>`, "g");
+  return text.replace(mentionPattern, "").trim();
+};
+
+/**
+ * Determine if a Slack message should be skipped for translation.
+ */
+export const skipTranslation = (message, botUserId = null) => {
   if (!message || message.bot_id || !message.text || message.subtype)
     return true;
+
+  // If we have the bot user ID, check if message is only a bot mention
+  if (botUserId && message.text.trim() === `<@${botUserId}>`) {
+    return true;
+  }
+
+  // Fallback: check if it's only any user mention
+  if (/^<@U[A-Z0-9]+>$/.test(message.text.trim())) return true;
 
   let textContent = "";
 
   if (Array.isArray(message.blocks)) {
     for (const block of message.blocks) {
       if (block.type === "rich_text") {
-        for (const element of block.elements || []) {
-          if (element.type === "rich_text_section") {
-            for (const sub of element.elements || []) {
-              if (sub.type === "text") {
-                textContent += sub.text + " ";
-              }
-            }
+        for (const el of block.elements || []) {
+          if (el.type === "rich_text_section") {
+            textContent += (el.elements || [])
+              .filter((sub) => sub.type === "text")
+              .map((sub) => sub.text)
+              .join(" ");
           }
         }
       }
@@ -34,74 +75,112 @@ export const skipTranslation = (message) => {
     }
   }
 
-  if (!textContent && message.text) {
-    textContent = message.text;
-  }
+  if (!textContent && message.text) textContent = message.text;
 
-  const hasEnoughText = textContent.trim().length >= 3;
-
-  return !hasEnoughText;
+  return textContent.trim().length < 3;
 };
 
+/**
+ * Apply glossary transformations before translation.
+ */
 export const handleGlossary = (text, glossary = {}) => {
   const { terms = [], mapping = [] } = glossary;
 
-  terms.forEach((term) => {
-    if (term && term.trim()) {
+  // Protect glossary terms
+  for (const term of terms) {
+    if (term?.trim()) {
       const regex = new RegExp(`\\b${term.trim()}\\b`, "gi");
       text = text.replace(regex, `<<KEEP:${term.trim()}>>`);
     }
-  });
+  }
 
-  mapping.forEach((mappingItem) => {
-    if (mappingItem) {
-      let source, target;
+  // Map source terms to target replacements
+  for (const item of mapping) {
+    let source, target;
+    if (!item) continue;
 
-      if (typeof mappingItem === "string") {
-        [source, target] = mappingItem.split(":");
-        source = source?.trim();
-        target = target?.trim();
-      } else {
-        source = mappingItem.source;
-        target = mappingItem.target;
-      }
-
-      if (source && target) {
-        const regex = new RegExp(`\\b${source}\\b`, "gi");
-        text = text.replace(regex, `<<MAP:${source}:${target}>>`);
-      }
+    if (typeof item === "string") {
+      [source, target] = item.split(":").map((s) => s?.trim());
+    } else {
+      ({ source, target } = item);
     }
-  });
+
+    if (source && target) {
+      const regex = new RegExp(`\\b${source}\\b`, "gi");
+      text = text.replace(regex, `<<MAP:${source}:${target}>>`);
+    }
+  }
 
   return text;
 };
 
-export const postProcessTranslation = (translatedText) => {
-  let processedText = translatedText;
+/**
+ * Restore glossary terms after translation.
+ */
+export const postProcessTranslation = (translatedText) =>
+  translatedText
+    .replace(/<<KEEP:([^>]+)>>/g, (_, term) => term)
+    .replace(/<<MAP:[^:]+:([^>]+)>>/g, (_, target) => target);
 
-  processedText = processedText.replace(/<<KEEP:([^>]+)>>/g, (match, term) => {
-    return term;
-  });
+/**
+ * Calculate Jaccard similarity between two texts.
+ */
+export const calculateSimilarity = (text1, text2) => {
+  const words1 = new Set(text1.toLowerCase().split(/\s+/));
+  const words2 = new Set(text2.toLowerCase().split(/\s+/));
 
-  processedText = processedText.replace(
-    /<<MAP:[^:]+:([^>]+)>>/g,
-    (match, target) => {
-      return target;
-    }
-  );
+  const intersection = [...words1].filter((w) => words2.has(w));
+  const unionSize = new Set([...words1, ...words2]).size;
 
-  return processedText;
+  return unionSize ? intersection.length / unionSize : 0;
 };
 
-export const calculateSimilarity = (text1, text2) => {
-  const words1 = text1.toLowerCase().split(/\s+/);
-  const words2 = text2.toLowerCase().split(/\s+/);
+export const sendOrUpdateMessage = async ({
+  event,
+  user,
+  botToken,
+  originalText,
+  translation,
+  fromLang,
+  toLang,
+}) => {
+  const lang = constants.LANGUAGES[toLang];
+  const buttons = translationButtons({
+    message_ts: event.ts,
+    original_text: event.text, // Use original event.text to preserve the mention in button data
+    translation,
+    from_lang: fromLang,
+    to_lang: toLang,
+  });
 
-  const set1 = new Set(words1);
-  const set2 = new Set(words2);
+  if (user.access_token) {
+    const text = buildTranslationText(event.text, translation, lang, true);
 
-  const intersection = [...set1].filter((w) => set2.has(w));
-  const union = new Set([...words1, ...words2]);
+    const blocks = [
+      { type: "section", text: { type: "mrkdwn", text } },
+      buttons,
+    ];
 
-  return intersection.length / union.size;
+    return updateMessage({
+      channel: event.channel,
+      ts: event.ts,
+      text,
+      user_access_token: user.access_token,
+      blocks,
+    });
+  } else {
+    const text = buildTranslationText(null, translation, lang, false);
+
+    const blocks = [
+      { type: "section", text: { type: "mrkdwn", text } },
+      buttons,
+    ];
+
+    return sendMessage({
+      channel: event.channel,
+      bot_access_token: botToken,
+      ts: event.ts,
+      blocks,
+    });
+  }
 };

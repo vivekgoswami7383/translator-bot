@@ -19,12 +19,10 @@ import Setting from "../models/Setting.js";
 
 export const redirect = async (req, res) => {
   try {
-    const code = req.query.code;
-
+    const { code } = req.query;
     const { error } = redirectSchema({ code });
-    if (error) {
+    if (error)
       return res.status(400).json({ success: false, message: error.message });
-    }
 
     const oauthResponse = await oauth({ code });
     if (!oauthResponse.success) {
@@ -33,17 +31,20 @@ export const redirect = async (req, res) => {
         .json({ success: false, message: oauthResponse.message });
     }
 
+    const { team, authed_user, access_token, bot_user_id } = oauthResponse.data;
+
     const organization = {
-      team_id: oauthResponse.data.team.id,
-      team_name: oauthResponse.data.team.name,
-      authed_user_id: oauthResponse.data.authed_user.id,
-      bot_access_token: oauthResponse.data.access_token,
+      team_id: team.id,
+      team_name: team.name,
+      bot_user_id: bot_user_id,
+      authed_user_id: authed_user.id,
+      bot_access_token: access_token,
     };
 
     const user = {
-      team_id: oauthResponse.data.team.id,
-      user_id: oauthResponse.data.authed_user.id,
-      access_token: oauthResponse.data.authed_user.access_token,
+      team_id: team.id,
+      user_id: authed_user.id,
+      access_token: authed_user.access_token,
     };
 
     await Workspace.findOneAndUpdate(
@@ -68,52 +69,44 @@ export const redirect = async (req, res) => {
       `${constants.SLACK.REDIRECT_TO_WORKSPACE}/?workspaceTeamId=${organization.team_id}`
     );
   } catch (error) {
-    console.log("ERROR", error);
+    console.error("Redirect error:", error);
     return res.status(400).json({ success: false, message: error.message });
   }
 };
 
 export const events = async (req, res) => {
   try {
-    if (req.body.type === constants.URL_VERIFICATION) {
-      return res.json({ challenge: req.body.challenge });
+    const { type, event, team_id, challenge } = req.body;
+
+    if (type === constants.URL_VERIFICATION) {
+      return res.json({ challenge });
     }
 
-    res.status(200).send();
-
-    const { event, team_id } = req.body;
-
-    console.log(JSON.stringify(req.body));
+    res.sendStatus(200);
 
     const workspace = await Workspace.findOne({ team_id });
-    if (!workspace) {
-      return res.status(404);
-    }
+    if (!workspace) return;
 
     const botAccessToken = workspace.bot_access_token;
 
     switch (event.type) {
       case "app_home_opened": {
         const template = await handleAppHomePage();
-
         await openHomePage({
           user: event.user,
           bot_access_token: botAccessToken,
-          template: template,
+          template,
         });
         break;
       }
 
       case "message": {
-        if (skipTranslation(event)) return;
+        if (skipTranslation(event, workspace.bot_user_id)) return;
 
-        const user = await User.findOne({
-          team_id: team_id,
-          user_id: event.user,
-        });
+        const user = await User.findOne({ team_id, user_id: event.user });
 
         if (!user) {
-          return await sendMessage({
+          return sendMessage({
             channel: event.channel,
             message:
               event.channel_type === "im"
@@ -123,29 +116,23 @@ export const events = async (req, res) => {
           });
         }
 
-        switch (event.channel_type) {
-          case "group":
-          case "channel": {
-            const setting = await Setting.findOne({
-              team_id: team_id,
+        if (["group", "channel"].includes(event.channel_type)) {
+          const setting = await Setting.findOne({ team_id });
+          if (!setting || !setting.channels.includes(event.channel)) {
+            return sendMessage({
+              channel: event.channel,
+              message: constants.MESSAGES.ENABLE_TRANSLATION_MESSAGE,
+              bot_access_token: botAccessToken,
             });
-
-            if (!setting || !setting.channels.includes(event.channel)) {
-              return await sendMessage({
-                channel: event.channel,
-                message: constants.MESSAGES.ENABLE_TRANSLATION_MESSAGE,
-                bot_access_token: botAccessToken,
-              });
-            }
-
-            return await handleTranslation(event, user, botAccessToken);
-          }
-
-          case "im": {
-            return await handleTranslation(event, user, botAccessToken);
           }
         }
-        break;
+
+        return handleTranslation(
+          event,
+          user,
+          botAccessToken,
+          workspace.bot_user_id
+        );
       }
 
       case "app_mention": {
@@ -153,14 +140,12 @@ export const events = async (req, res) => {
           channel: event.channel,
           message: constants.MESSAGES.ENABLE_TRANSLATION_MESSAGE,
           bot_access_token: botAccessToken,
-          ts: event.ts,
         });
         break;
       }
     }
   } catch (error) {
     console.error("Events error:", error);
-    return res.status(500);
   }
 };
 
@@ -169,150 +154,117 @@ export const interactiveEvents = async (req, res) => {
     const payload = JSON.parse(req.body.payload);
     const { type, team } = payload;
 
-    console.log("-----payload", payload);
+    res.sendStatus(200);
 
     const workspace = await Workspace.findOne({ team_id: team.id });
-    if (!workspace) {
-      return res.status(404);
-    }
+    if (!workspace) return;
 
-    switch (type) {
-      case "view_submission":
-        await handleViewSubmission(payload, workspace.bot_access_token);
-        break;
-      case "block_actions":
-        await handleBlockActions(payload, workspace.bot_access_token);
-        break;
-    }
+    const token = workspace.bot_access_token;
 
-    return res.status(200).send();
+    if (type === "view_submission") {
+      await handleViewSubmission(payload, token);
+    } else if (type === "block_actions") {
+      await handleBlockActions(payload, token);
+    }
   } catch (error) {
     console.error("Interactive events error:", error);
-    return res.status(500).send();
+    res.sendStatus(500);
   }
 };
 
 export const slashCommands = async (req, res) => {
-  res.status(200).send();
+  res.sendStatus(200);
 
   try {
-    const payload = req.body;
-
-    const { command, text, user_id, team_id, channel_id } = payload;
+    const { command, text, user_id, team_id, channel_id } = req.body;
 
     const workspace = await Workspace.findOne({ team_id });
-    if (!workspace) {
-      return res.status(404);
-    }
+    if (!workspace) return;
 
-    switch (command) {
-      case "/set-translation": {
-        const params = Object.fromEntries(
-          text.split(" ").map((p) => {
-            const [key, value] = p.split(":");
-            return [key, value];
-          })
+    const token = workspace.bot_access_token;
+
+    const reply = (message) =>
+      sendEphemeralMessage({
+        channel: channel_id,
+        user: user_id,
+        message,
+        bot_access_token: token,
+      });
+
+    if (command === "/set-translation") {
+      const params = Object.fromEntries(
+        text.split(" ").map((p) => {
+          const [key, value] = p.split(":");
+          return [key, value];
+        })
+      );
+
+      const { primary, target, style } = params;
+
+      if (!primary || !target) {
+        return reply(
+          "Please provide both `primary:<lang>` and `target:<lang>`.\n\nExample: `/set-translation primary:en target:ja style:formal`"
         );
-
-        const { primary, target, style } = params;
-
-        if (!primary || !target) {
-          await sendEphemeralMessage({
-            channel: channel_id,
-            user: user_id,
-            message:
-              "Please provide both `primary:<lang>` and `target:<lang>` codes.\n\nExample: `/set-translation primary:en target:ja style:formal`",
-            bot_access_token: workspace.bot_access_token,
-          });
-          break;
-        }
-
-        if (!validateLang(primary)) {
-          await sendEphemeralMessage({
-            channel: channel_id,
-            user: user_id,
-            message: `Invalid primary language code: \`${primary}\`. Please use a valid ISO 639-1 code (e.g., \`en\`, \`ja\`).`,
-            bot_access_token: workspace.bot_access_token,
-          });
-          break;
-        }
-
-        if (!validateLang(target)) {
-          await sendEphemeralMessage({
-            channel: channel_id,
-            user: user_id,
-            message: `Invalid target language code: \`${target}\`. Please use a valid ISO 639-1 code (e.g., \`en\`, \`ja\`).`,
-            bot_access_token: workspace.bot_access_token,
-          });
-          break;
-        }
-
-        if (style && !["formal", "causal"].includes(style)) {
-          await sendEphemeralMessage({
-            channel: channel_id,
-            user: user_id,
-            message:
-              "Invalid style. It should be one of the following: `formal`, `causal`.",
-            bot_access_token: workspace.bot_access_token,
-          });
-          break;
-        }
-
-        await User.findOneAndUpdate(
-          { team_id, user_id },
-          {
-            team_id,
-            user_id,
-            primary_language: primary,
-            target_language: target,
-            style,
-          },
-          { upsert: true, new: true }
-        );
-
-        await sendEphemeralMessage({
-          channel: channel_id,
-          user: user_id,
-          message: `Your translation have been updated successfully!`,
-          bot_access_token: workspace.bot_access_token,
-        });
-        break;
       }
 
-      case "/translate-toggle": {
-        const setting = await Setting.findOneAndUpdate(
-          { team_id },
-          [
-            {
-              $set: {
-                channels: {
-                  $cond: [
-                    { $in: [channel_id, "$channels"] },
-                    { $setDifference: ["$channels", [channel_id]] },
-                    { $concatArrays: ["$channels", [channel_id]] },
-                  ],
-                },
+      if (!validateLang(primary)) {
+        return reply(
+          `Invalid primary language: \`${primary}\`. Use ISO 639-1 codes (e.g. \`en\`, \`ja\`).`
+        );
+      }
+
+      if (!validateLang(target)) {
+        return reply(
+          `Invalid target language: \`${target}\`. Use ISO 639-1 codes (e.g. \`en\`, \`ja\`).`
+        );
+      }
+
+      if (style && !["formal", "causal"].includes(style)) {
+        return reply("Invalid style. Use either `formal` or `causal`.");
+      }
+
+      await User.findOneAndUpdate(
+        { team_id, user_id },
+        {
+          team_id,
+          user_id,
+          primary_language: primary,
+          target_language: target,
+          style,
+        },
+        { upsert: true, new: true }
+      );
+
+      return reply(
+        "Your translation preferences have been updated successfully!"
+      );
+    }
+
+    if (command === "/translate-toggle") {
+      const setting = await Setting.findOneAndUpdate(
+        { team_id },
+        [
+          {
+            $set: {
+              channels: {
+                $cond: [
+                  { $in: [channel_id, "$channels"] },
+                  { $setDifference: ["$channels", [channel_id]] },
+                  { $concatArrays: ["$channels", [channel_id]] },
+                ],
               },
             },
-          ],
-          { new: true, upsert: true }
-        );
+          },
+        ],
+        { new: true, upsert: true }
+      );
 
-        const status = setting.channels.includes(channel_id)
-          ? "enabled"
-          : "disabled";
-
-        await sendEphemeralMessage({
-          channel: channel_id,
-          user: user_id,
-          message: `Translation has been ${status} for this channel.`,
-          bot_access_token: workspace.bot_access_token,
-        });
-      }
+      const status = setting.channels.includes(channel_id)
+        ? "enabled"
+        : "disabled";
+      return reply(`Translation has been ${status} for this channel.`);
     }
-    return res.status(200).send();
   } catch (error) {
     console.error("SLASH COMMAND ERROR:", error);
-    return res.status(500).send();
   }
 };
