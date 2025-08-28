@@ -25,6 +25,7 @@ import {
   manageMappingModal,
 } from "../helpers/templates.js";
 import Setting from "../models/Setting.js";
+import User from "../models/User.js";
 
 export const handleViewSubmission = async (payload, botToken) => {
   const { view } = payload;
@@ -107,35 +108,57 @@ export const handleViewSubmission = async (payload, botToken) => {
     }
 
     case "translation_feedback_callback": {
-      const metadata = JSON.parse(view.private_metadata);
-      const values = view.state.values;
+      const {
+        original_text,
+        current_translation,
+        from_lang,
+        to_lang,
+        channel_id,
+        message_ts,
+      } = JSON.parse(view.private_metadata);
+
+      const { improved_translation_data, reason_data } = view.state.values;
+
+      const user = await User.findOne({ user_id: payload.user.id });
 
       const improvedTranslation =
-        values.improved_translation_data.improved_translation.value;
-      const reason = values.reason_data?.reason?.value || "";
+        improved_translation_data.improved_translation.value;
+      const reason = reason_data?.reason?.value || "";
 
       await Correction.create({
         user_id: payload.user.id,
         team_id: payload.team.id,
-        original_text: metadata.original_text,
-        old_translation: metadata.current_translation,
+        original_text,
+        old_translation: current_translation,
         new_translation: improvedTranslation,
-        reason: reason,
-        from_language: metadata.from_lang,
-        to_language: metadata.to_lang,
-        channel_id: metadata.channel_id,
-        message_ts: metadata.message_ts,
+        reason,
+        from_language: from_lang,
+        to_language: to_lang,
+        channel_id,
+        message_ts,
       });
 
-      const updatedText = `🌍 *Translation (${
-        constants.LANGUAGES[metadata.to_lang].name
-      }):* ${improvedTranslation}`;
+      const lang = constants.LANGUAGES[to_lang];
+      const token = user?.access_token || botToken;
 
-      await sendMessage({
-        channel: metadata.channel_id,
-        message: `✅ Thank you for the feedback! Translation has been updated and will be used for similar texts in the future.`,
-        bot_access_token: botToken,
-        ts: metadata.message_ts,
+      const text = user?.access_token
+        ? `${original_text}\n\n${lang.flag} *Translation (${lang.name}):* ${improvedTranslation}`
+        : `${lang.flag} *Translation (${lang.name}):* ${improvedTranslation}`;
+
+      const buttons = translationButtons({
+        message_ts,
+        original_text,
+        translation: improvedTranslation,
+        from_lang,
+        to_lang,
+      });
+
+      await updateMessage({
+        channel: channel_id,
+        ts: message_ts,
+        text,
+        user_access_token: token,
+        blocks: [{ type: "section", text: { type: "mrkdwn", text } }, buttons],
       });
     }
   }
@@ -172,23 +195,25 @@ export const handleBlockActions = async (payload, botToken) => {
 
     case "suggest_better_translation": {
       const translationData = JSON.parse(action.value);
+
+      const template = translationFeedbackModal({
+        channel_id: channel.id,
+        message_ts: payload.message.ts,
+        original_text: translationData.original_text,
+        current_translation: translationData.translation,
+        from_lang: translationData.from_lang,
+        to_lang: translationData.to_lang,
+      });
+
       await openModel({
         trigger_id: payload.trigger_id,
         bot_access_token: botToken,
-        template: translationFeedbackModal({
-          channel_id: channel.id,
-          message_ts: translationData.message_ts,
-          original_text: translationData.original_text,
-          current_translation: translationData.translation,
-          from_lang: translationData.from_lang,
-          to_lang: translationData.to_lang,
-        }),
+        template,
       });
       break;
     }
 
     case "hide_translation": {
-      const hideData = JSON.parse(action.value);
       await deleteMessage({
         channel: channel.id,
         ts: message.ts,
@@ -291,15 +316,61 @@ export const handleTranslation = async (event, user, botToken) => {
     to_language: targetLang,
   }).sort({ created_at: -1 });
 
-  if (existingCorrection) return existingCorrection.new_translation;
+  if (existingCorrection) {
+    const buttons = translationButtons({
+      message_ts: event.ts,
+      original_text: message,
+      translation: existingCorrection.new_translation,
+      from_lang: detectedLang,
+      to_lang: targetLang,
+    });
+
+    if (user.access_token) {
+      const updatedText = `${message}\n\n${constants.LANGUAGES[targetLang].flag} *Translation (${constants.LANGUAGES[targetLang].name}):* ${existingCorrection.new_translation}`;
+
+      await updateMessage({
+        channel: event.channel,
+        ts: event.ts,
+        text: updatedText,
+        user_access_token: user.access_token,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: updatedText,
+            },
+          },
+          buttons,
+        ],
+      });
+    } else {
+      const updatedText = `${constants.LANGUAGES[targetLang].flag} *Translation (${constants.LANGUAGES[targetLang].name}):* ${existingCorrection.new_translation}`;
+
+      await sendMessage({
+        channel: event.channel,
+        bot_access_token: botToken,
+        ts: event.ts,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: updatedText,
+            },
+          },
+          buttons,
+        ],
+      });
+    }
+    return;
+  }
 
   const fuzzyCorrections = await Correction.find({
     team_id: teamId,
     from_language: detectedLang,
     to_language: targetLang,
-  })
-    .sort({ created_at: -1 })
-    .limit(5);
+  }).sort({ created_at: -1 });
 
   let bestMatch = null;
   let bestSimilarity = 0;
@@ -312,7 +383,55 @@ export const handleTranslation = async (event, user, botToken) => {
     }
   }
 
-  if (bestMatch) return bestMatch.new_translation;
+  if (bestMatch) {
+    const buttons = translationButtons({
+      message_ts: event.ts,
+      original_text: message,
+      translation: bestMatch.new_translation,
+      from_lang: detectedLang,
+      to_lang: targetLang,
+    });
+
+    if (user.access_token) {
+      const updatedText = `${message}\n\n${constants.LANGUAGES[targetLang].flag} *Translation (${constants.LANGUAGES[targetLang].name}):* ${bestMatch.new_translation}`;
+
+      await updateMessage({
+        channel: event.channel,
+        ts: event.ts,
+        text: updatedText,
+        user_access_token: user.access_token,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: updatedText,
+            },
+          },
+          buttons,
+        ],
+      });
+    } else {
+      const updatedText = `${constants.LANGUAGES[targetLang].flag} *Translation (${constants.LANGUAGES[targetLang].name}):* ${bestMatch.new_translation}`;
+
+      await sendMessage({
+        channel: event.channel,
+        bot_access_token: botToken,
+        ts: event.ts,
+        blocks: [
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: updatedText,
+            },
+          },
+          buttons,
+        ],
+      });
+    }
+    return;
+  }
 
   const translatedMessageResponse = await translateMessage({
     message: cleanText,
@@ -339,7 +458,7 @@ export const handleTranslation = async (event, user, botToken) => {
     await updateMessage({
       channel: event.channel,
       ts: event.ts,
-      // text: updatedText,
+      text: updatedText,
       user_access_token: user.access_token,
       blocks: [
         {

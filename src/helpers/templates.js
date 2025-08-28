@@ -228,7 +228,7 @@ export const translationFeedbackModal = ({
     callback_id: "translation_feedback_callback",
     title: {
       type: "plain_text",
-      text: "🔄 Suggest Better Translation",
+      text: "🔄 Suggest Translation",
       emoji: true,
     },
     submit: {
