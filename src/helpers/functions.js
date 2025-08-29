@@ -1,4 +1,5 @@
 import ISO6391 from "iso-639-1";
+import stringSimilarity from "string-similarity";
 import { translationButtons } from "./templates.js";
 import { sendMessage, updateMessage } from "../services/slack.service.js";
 import { constants } from "../helpers/constants.js";
@@ -126,13 +127,10 @@ export const postProcessTranslation = (translatedText) =>
  * Calculate Jaccard similarity between two texts.
  */
 export const calculateSimilarity = (text1, text2) => {
-  const words1 = new Set(text1.toLowerCase().split(/\s+/));
-  const words2 = new Set(text2.toLowerCase().split(/\s+/));
-
-  const intersection = [...words1].filter((w) => words2.has(w));
-  const unionSize = new Set([...words1, ...words2]).size;
-
-  return unionSize ? intersection.length / unionSize : 0;
+  return stringSimilarity.compareTwoStrings(
+    text1.toLowerCase(),
+    text2.toLowerCase()
+  );
 };
 
 export const sendOrUpdateMessage = async ({

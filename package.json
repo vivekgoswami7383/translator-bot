@@ -21,6 +21,7 @@
     "mongoose": "^8.18.0",
     "nodemon": "^3.1.10",
     "openai": "^4.67.3",
+    "string-similarity": "^4.0.4",
     "uuid": "^11.1.0"
   }
 }

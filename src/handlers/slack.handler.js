@@ -294,15 +294,18 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
     to_language: user.target_language,
   }).sort({ created_at: -1 });
 
-  const bestMatch = corrections.reduce(
-    (best, c) => {
-      const sim = calculateSimilarity(textWithoutBotMention, c.original_text);
-      return sim > 0.8 && sim > best.sim ? { correction: c, sim } : best;
-    },
-    { correction: null, sim: 0 }
-  ).correction;
+  let bestMatch = null;
+  let bestSim = 0;
 
-  console.log("bestMatch", bestMatch);
+  for (const c of corrections) {
+    const sim = calculateSimilarity(textWithoutBotMention, c.original_text);
+    if (sim > bestSim) {
+      bestSim = sim;
+      bestMatch = c;
+    }
+  }
+
+  if (bestSim < 0.8) bestMatch = null;
 
   if (bestMatch) {
     return sendOrUpdateMessage({
