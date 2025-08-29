@@ -5,7 +5,8 @@ export const constants = {
   AUTHENTICATION: {
     PORT: process.env.PORT || 3000,
     DATABASE: {
-      URL: process.env.MONGO_URI || "mongodb://localhost:27017/translator-bot",
+      URL:
+        process.env.DATABASE_URI || "mongodb://localhost:27017/translator-bot",
     },
   },
   URL_VERIFICATION: "url_verification",
@@ -20,35 +21,13 @@ export const constants = {
   OPENAI: {
     MODEL: "gpt-4o-mini",
     TEMPERATURE: 0,
-    MAX_TOKENS: 10000,
+    MAX_TOKENS: 1000,
     API_KEY: process.env.OPENAI_API_KEY,
   },
   MESSAGES: {
     WELCOME_MESSAGE: `🌍 Welcome to Translator Bot! I can help translate messages in your channels. Use \`/set-translation primary:ja target:en\` to set your language preferences and \`/translate-toggle\` to enable/disable translation in channels.`,
     SET_TRANSLATION_MESSAGE: `👋 Hello! I'm the Translation Bot. Use \`/set-translation primary:ja target:en\` to set your preferences.`,
     ENABLE_TRANSLATION_MESSAGE: `👋 Hello! I'm the Translation Bot. Use \`/set-translation primary:ja target:en\` to set your preferences and \`/translate-toggle\` to enable translation in this channel.`,
-  },
-  GLOSSARY: {
-    ACCOUNTING_TERMS: [
-      "MyNumber",
-      "NISA",
-      "GAAP",
-      "IFRS",
-      "EBITDA",
-      "ROI",
-      "NPV",
-      "IRR",
-      "CAPEX",
-      "OPEX",
-      "P&L",
-      "B/S",
-      "CF",
-      "KPI",
-      "SLA",
-      "API",
-      "UI",
-      "UX",
-    ],
   },
   LANGUAGES: {
     af: { name: "Afrikaans", code: "af", flag: "🇿🇦" },
@@ -159,5 +138,9 @@ export const constants = {
     yi: { name: "Yiddish", code: "yi", flag: "🇮🇱" },
     yo: { name: "Yoruba", code: "yo", flag: "🇳🇬" },
     zu: { name: "Zulu", code: "zu", flag: "🇿🇦" },
+  },
+  LANGUAGE_STYLES: {
+    FORMAL: "formal",
+    CASUAL: "casual",
   },
 };

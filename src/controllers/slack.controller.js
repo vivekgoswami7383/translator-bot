@@ -219,8 +219,14 @@ export const slashCommands = async (req, res) => {
         );
       }
 
-      if (style && !["formal", "causal"].includes(style)) {
-        return reply("Invalid style. Use either `formal` or `causal`.");
+      if (
+        style &&
+        ![
+          constants.LANGUAGE_STYLES.FORMAL,
+          constants.LANGUAGE_STYLES.CASUAL,
+        ].includes(style)
+      ) {
+        return reply("Invalid style. Use either `formal` or `casual`.");
       }
 
       await User.findOneAndUpdate(

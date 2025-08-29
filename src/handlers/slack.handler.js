@@ -324,6 +324,7 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
     message: cleanText,
     fromLang: detectedLang,
     toLang: user.target_language,
+    style: user.style,
   });
   if (!translatedResponse.success) return;
 

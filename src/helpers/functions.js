@@ -174,7 +174,7 @@ export const sendOrUpdateMessage = async ({
       buttons,
     ];
 
-    return sendMessage({
+    sendMessage({
       channel: event.channel,
       bot_access_token: botToken,
       ts: event.ts,
