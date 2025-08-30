@@ -156,7 +156,7 @@ export const interactiveEvents = async (req, res) => {
     const payload = JSON.parse(req.body.payload);
     const { type, team } = payload;
 
-    res.sendStatus(200);
+    res.status(200).send();
 
     const workspace = await Workspace.findOne({ team_id: team.id });
     if (!workspace) return;

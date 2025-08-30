@@ -85,10 +85,16 @@ export const handleViewSubmission = async (payload, botToken) => {
         }
       }
 
-      if (setting?.glossary?.mapping?.length > 0) {
+      if (selectedMappings.length > 0) {
         const selectedValues = selectedMappings.map((o) => o.value);
-        currentMapping = currentMapping.filter((m) =>
-          selectedValues.includes(`${m.source}:${m.target}`)
+
+        currentMapping = currentMapping.filter(
+          (m) =>
+            selectedValues.includes(`${m.source}:${m.target}`) ||
+            (addedSource &&
+              addedTarget &&
+              m.source === addedSource &&
+              m.target === addedTarget)
         );
       }
 
