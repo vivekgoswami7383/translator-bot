@@ -291,6 +291,7 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
   // Fuzzy match
   const corrections = await Correction.find({
     team_id: teamId,
+    user_id: user.user_id,
     from_language: detectedLang,
     to_language: user.target_language,
   }).sort({ created_at: -1 });
