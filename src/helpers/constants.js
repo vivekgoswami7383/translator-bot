@@ -27,7 +27,7 @@ export const constants = {
   MESSAGES: {
     WELCOME_MESSAGE: `🌍 Welcome to Translator Bot! I can help translate messages in your channels. Use \`/set-translation primary:ja target:en\` to set your language preferences and \`/translate-toggle\` to enable/disable translation in channels.`,
     SET_TRANSLATION_MESSAGE: `👋 Hello! I'm the Translation Bot. Use \`/set-translation primary:ja target:en\` to set your preferences.`,
-    ENABLE_TRANSLATION_MESSAGE: `👋 Hello! I'm the Translation Bot. Use \`/set-translation primary:ja target:en\` to set your preferences and \`/translate-toggle\` to enable translation in this channel.`,
+    ENABLE_TRANSLATION_MESSAGE: `👋 Hello! I'm the Translation Bot. Use \`/translate-toggle\` to enable translation in this channel.`,
   },
   LANGUAGES: {
     af: { name: "Afrikaans", code: "af", flag: "🇿🇦" },
