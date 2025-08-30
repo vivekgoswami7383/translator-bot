@@ -255,6 +255,7 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
   if (!textWithoutBotMention.trim()) return;
 
   const detectedLangResponse = await detectLanguage(textWithoutBotMention);
+
   if (!detectedLangResponse.success) return;
 
   const detectedLang = detectedLangResponse.data;
@@ -326,6 +327,7 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
     toLang: user.target_language,
     style: user.style,
   });
+
   if (!translatedResponse.success) return;
 
   const translatedMessage = postProcessTranslation(translatedResponse.data);

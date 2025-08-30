@@ -33,6 +33,8 @@ export const redirect = async (req, res) => {
 
     const { team, authed_user, access_token, bot_user_id } = oauthResponse.data;
 
+    console.log("oauthResponse", oauthResponse.data);
+
     const organization = {
       team_id: team.id,
       team_name: team.name,
@@ -254,9 +256,19 @@ export const slashCommands = async (req, res) => {
             $set: {
               channels: {
                 $cond: [
-                  { $in: [channel_id, "$channels"] },
-                  { $setDifference: ["$channels", [channel_id]] },
-                  { $concatArrays: ["$channels", [channel_id]] },
+                  { $in: [channel_id, { $ifNull: ["$channels", []] }] },
+                  {
+                    $setDifference: [
+                      { $ifNull: ["$channels", []] },
+                      [channel_id],
+                    ],
+                  },
+                  {
+                    $concatArrays: [
+                      { $ifNull: ["$channels", []] },
+                      [channel_id],
+                    ],
+                  },
                 ],
               },
             },

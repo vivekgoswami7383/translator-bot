@@ -16,11 +16,13 @@ const userSchema = new mongoose.Schema(
     },
     primary_language: {
       type: String,
-      optional: true,
+      required: true,
+      default: "en",
     },
     target_language: {
       type: String,
-      optional: true,
+      required: true,
+      default: "ja",
     },
     style: {
       type: String,
