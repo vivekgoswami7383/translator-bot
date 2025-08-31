@@ -25,6 +25,7 @@ export const oauth = async ({ code }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log("OAUTH ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response.data.message,
@@ -59,11 +60,17 @@ export const sendMessage = async ({
     };
     const response = await axios(options);
 
+    console.log(
+      "SEND MESSAGE RESPONSE",
+      JSON.stringify(response.data, null, 2)
+    );
+
     return {
       success: true,
       data: response.data,
     };
   } catch (error) {
+    console.log("SEND MESSAGE ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response.data.message,
@@ -110,6 +117,10 @@ export const sendEphemeralMessage = async ({
       data: response.data,
     };
   } catch (error) {
+    console.log(
+      "SEND EPHEMERAL MESSAGE ERROR:",
+      JSON.stringify(error.response, null, 2)
+    );
     return {
       success: false,
       message: error.response.data.message,
@@ -140,6 +151,7 @@ export const openModel = async ({ trigger_id, bot_access_token, template }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log("OPEN MODEL ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response.data.message,
@@ -170,6 +182,7 @@ export const updateModel = async ({ view_id, bot_access_token, template }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log("UPDATE MODEL ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response.data.message,
@@ -204,11 +217,21 @@ export const updateMessage = async ({
     };
 
     const response = await axios(options);
+
+    console.log(
+      "UPDATE MESSAGE RESPONSE",
+      JSON.stringify(response.data, null, 2)
+    );
+
     return {
       success: true,
       data: response.data,
     };
   } catch (error) {
+    console.log(
+      "UPDATE MESSAGE ERROR:",
+      JSON.stringify(error.response, null, 2)
+    );
     return {
       success: false,
       message: error.response?.data?.message || error.message,
@@ -237,6 +260,10 @@ export const deleteMessage = async ({ channel, ts, bot_access_token }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log(
+      "DELETE MESSAGE ERROR:",
+      JSON.stringify(error.response, null, 2)
+    );
     return {
       success: false,
       message: error.response?.data?.message || error.message,
@@ -260,6 +287,7 @@ export const user = async ({ user_id, bot_access_token }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log("USER ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response?.data?.message || error.message,
@@ -283,6 +311,7 @@ export const channel = async ({ channel_id, bot_access_token }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log("CHANNEL ERROR:", JSON.stringify(error.response, null, 2));
     return {
       success: false,
       message: error.response?.data?.message || error.message,
@@ -314,9 +343,13 @@ export const openHomePage = async ({ user, bot_access_token, template }) => {
       data: response.data,
     };
   } catch (error) {
+    console.log(
+      "OPEN HOME PAGE ERROR:",
+      JSON.stringify(error.response, null, 2)
+    );
     return {
       success: false,
-      message: error.response.data.message,
+      message: error.response?.data?.message || error.message,
     };
   }
 };

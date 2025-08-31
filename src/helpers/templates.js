@@ -220,6 +220,7 @@ export const translationFeedbackModal = ({
   message_ts,
   original_text,
   current_translation,
+  improved_translation,
   from_lang,
   to_lang,
 }) => {
@@ -277,6 +278,7 @@ export const translationFeedbackModal = ({
             emoji: true,
           },
           action_id: "improved_translation",
+          initial_value: improved_translation,
         },
         label: {
           type: "plain_text",

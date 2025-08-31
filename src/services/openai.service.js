@@ -84,3 +84,49 @@ export const translateMessage = async ({
     return { success: false, error: error.message };
   }
 };
+
+export const enhanceTranslate = async ({ message }) => {
+  console.log("INSIDE ENHANCE TRANSLATE MESSAGE");
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: constants.OPENAI.MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `You are a professional translator and editor. Your task is to enhance and refine an existing translation.
+
+          Rules:
+          1. Input text will already be translated.
+          2. Do NOT change meaning. Instead, improve:
+            - Clarity
+            - Readability
+            - Tone consistency
+            - Natural fluency
+          3. Do not translate or modify:
+            - Emojis (e.g., :wave:)
+            - Slack formatting (*bold*, _italic_, ~strike~, :emoji:, inline code, code blocks, and links like <https://...>)
+            - Any text inside <<KEEP:...>> markers – keep the original term inside
+            - Any text inside <<MAP:source:target>> markers – replace with the target term
+          4. Preserve markdown and Slack formatting exactly.
+          5. Do not translate code or inline code.
+          6. Keep proper nouns and technical terms unchanged when appropriate.
+          7. If the translation is already good, make only subtle refinements.
+
+          IMPORTANT: Return only the improved translation with markers properly processed, nothing else.`,
+        },
+        {
+          role: "user",
+          content: message,
+        },
+      ],
+      temperature: constants.OPENAI.TEMPERATURE,
+      max_tokens: constants.OPENAI.MAX_TOKENS,
+    });
+
+    return { success: true, data: response.choices[0].message.content.trim() };
+  } catch (error) {
+    console.error("Translation error:", error);
+    return { success: false, error: error.message };
+  }
+};

@@ -3,6 +3,7 @@ import { openModel, deleteMessage } from "../services/slack.service.js";
 import {
   detectLanguage,
   translateMessage,
+  enhanceTranslate,
 } from "../services/openai.service.js";
 import {
   calculateSimilarity,
@@ -174,6 +175,12 @@ export const handleBlockActions = async (payload, botToken) => {
 
     case "suggest_better_translation": {
       const translationData = JSON.parse(action.value);
+
+      const enhancedTranslationResponse = await enhanceTranslate({
+        message: translationData.translation,
+      });
+      if (!enhancedTranslationResponse.success) return;
+
       return openModel({
         trigger_id: payload.trigger_id,
         bot_access_token: botToken,
@@ -182,6 +189,7 @@ export const handleBlockActions = async (payload, botToken) => {
           message_ts: translationData.message_ts,
           original_text: translationData.original_text,
           current_translation: translationData.translation,
+          improved_translation: enhancedTranslationResponse.data,
           from_lang: translationData.from_lang,
           to_lang: translationData.to_lang,
         }),
@@ -334,6 +342,11 @@ export const handleTranslation = async (event, user, botToken, botUserId) => {
     toLang: user.target_language,
     style: user.style,
   });
+
+  console.log(
+    "TRANSLATION RESPONSE:",
+    JSON.stringify(translatedResponse, null, 2)
+  );
 
   if (!translatedResponse.success) return;
 
