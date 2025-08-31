@@ -12,7 +12,6 @@ const userSchema = new mongoose.Schema(
     },
     access_token: {
       type: String,
-      required: true,
     },
     primary_language: {
       type: String,

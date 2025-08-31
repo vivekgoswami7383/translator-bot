@@ -105,18 +105,11 @@ export const events = async (req, res) => {
       case "message": {
         if (skipTranslation(event, workspace.bot_user_id)) return;
 
-        const user = await User.findOne({ team_id, user_id: event.user });
-
-        if (!user) {
-          return sendMessage({
-            channel: event.channel,
-            message:
-              event.channel_type === "im"
-                ? constants.MESSAGES.SET_TRANSLATION_MESSAGE
-                : constants.MESSAGES.ENABLE_TRANSLATION_MESSAGE,
-            bot_access_token: botAccessToken,
-          });
-        }
+        const user = await User.findOneAndUpdate(
+          { team_id, user_id: event.user },
+          { $setOnInsert: { team_id, user_id: event.user } },
+          { new: true, upsert: true }
+        );
 
         if (["group", "channel"].includes(event.channel_type)) {
           const setting = await Setting.findOne({ team_id });
