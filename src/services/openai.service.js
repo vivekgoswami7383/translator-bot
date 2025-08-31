@@ -61,7 +61,7 @@ export const translateMessage = async ({
           3. Preserve markdown and Slack formatting exactly.
           4. Do not translate code or inline code.
           5. Keep proper nouns and technical terms unchanged when appropriate.
-          6. If the text is already in the target language, return it unchanged.
+          6. Always translate from ${fromLang} to ${toLang}, unless the text is 100% identical to ${toLang}.
 
           IMPORTANT: The translation style must be ${style}.
             - If style = "${constants.LANGUAGE_STYLES.FORMAL}", use polite, respectful language.
