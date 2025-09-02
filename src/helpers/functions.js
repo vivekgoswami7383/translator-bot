@@ -45,8 +45,7 @@ export const removeBotMention = (text, botUserId) => {
  * Determine if a Slack message should be skipped for translation.
  */
 export const skipTranslation = (message, botUserId = null) => {
-  if (!message || message.bot_id || !message.text || message.subtype)
-    return true;
+  if (!message || message.bot_id || !message.text) return true;
 
   // If we have the bot user ID, check if message is only a bot mention
   if (botUserId && message.text.trim() === `<@${botUserId}>`) {
