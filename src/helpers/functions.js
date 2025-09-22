@@ -144,40 +144,76 @@ export const sendOrUpdateMessage = async ({
   const lang = constants.LANGUAGES[toLang];
   const buttons = translationButtons({
     message_ts: event.ts,
-    original_text: event.text, // Use original event.text to preserve the mention in button data
+    original_text: event.text,
     translation,
     from_lang: fromLang,
     to_lang: toLang,
   });
 
-  if (user.access_token) {
-    const text = buildTranslationText(event.text, translation, lang, true);
+  const thread_ts = event.thread_ts || event.ts;
 
-    const blocks = [
-      { type: "section", text: { type: "mrkdwn", text } },
-      buttons,
-    ];
+  try {
+    const text = buildTranslationText(
+      user.access_token ? event.text : null,
+      translation,
+      lang,
+      !!user.access_token
+    );
 
-    return updateMessage({
-      channel: event.channel,
-      ts: event.ts,
-      text,
-      user_access_token: user.access_token,
-      blocks,
-    });
-  } else {
-    const text = buildTranslationText(null, translation, lang, false);
+    const textBlocks = chunkText(text).map((chunk) => ({
+      type: "section",
+      text: { type: "mrkdwn", text: chunk },
+    }));
 
-    const blocks = [
-      { type: "section", text: { type: "mrkdwn", text } },
-      buttons,
-    ];
+    const buttonValueLength = (buttons?.elements?.[0]?.value || "").length;
+    const includeButtons = buttonValueLength <= 1800;
 
-    sendMessage({
+    const blocks = [...textBlocks, ...(includeButtons ? [buttons] : [])];
+
+    let res;
+    if (user.access_token) {
+      res = await updateMessage({
+        channel: event.channel,
+        ts: event.ts,
+        text,
+        user_access_token: user.access_token,
+        blocks,
+      });
+    } else {
+      res = await sendMessage({
+        channel: event.channel,
+        bot_access_token: botToken,
+        ts: event.ts,
+        blocks,
+      });
+    }
+
+    if (!res.data.ok && res.data.error === "msg_too_long") {
+      await sendMessage({
+        channel: event.channel,
+        bot_access_token: botToken,
+        message: `⚠️ The translation was too long to post in one message. Here it is instead:\n\n${translation}`,
+        ts: thread_ts,
+      });
+    }
+
+    return res;
+  } catch (err) {
+    await sendMessage({
       channel: event.channel,
       bot_access_token: botToken,
-      ts: event.ts,
-      blocks,
+      message: `⚠️ Could not send translation due to an error: ${err.message}`,
+      ts: thread_ts,
     });
   }
+};
+
+const chunkText = (text, chunkSize = 2900) => {
+  const chunks = [];
+  let start = 0;
+  while (start < text.length) {
+    chunks.push(text.slice(start, start + chunkSize));
+    start += chunkSize;
+  }
+  return chunks;
 };
