@@ -188,7 +188,10 @@ export const sendOrUpdateMessage = async ({
       });
     }
 
-    if (!res.data.ok && res.data.error === "msg_too_long") {
+    if (
+      !res.data.ok &&
+      (res.data.error === "msg_too_long" || res.data.error === "block_mismatch")
+    ) {
       await sendMessage({
         channel: event.channel,
         bot_access_token: botToken,
@@ -196,7 +199,6 @@ export const sendOrUpdateMessage = async ({
         ts: thread_ts,
       });
     }
-
     return res;
   } catch (err) {
     await sendMessage({
