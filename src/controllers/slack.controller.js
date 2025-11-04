@@ -111,17 +111,6 @@ export const events = async (req, res) => {
           { new: true, upsert: true }
         );
 
-        if (["group", "channel"].includes(event.channel_type)) {
-          const setting = await Setting.findOne({ team_id });
-          if (!setting || !setting.channels.includes(event.channel)) {
-            return sendMessage({
-              channel: event.channel,
-              message: constants.MESSAGES.ENABLE_TRANSLATION_MESSAGE,
-              bot_access_token: botAccessToken,
-            });
-          }
-        }
-
         return handleTranslation(
           event,
           user,
